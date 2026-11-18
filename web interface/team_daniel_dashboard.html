@@ -322,7 +322,28 @@
 
     button.fire:hover {
         background-color: #eb1515;
-        border-bottom: 6px solid #9a2727;
+        border-bottom: 8px solid #9a2727;
+    }
+    
+    button.fire:active {
+        animation: shake 0.5s;
+        background-color: #ddbbbb;
+        color: #000;
+        border: 2px solid #3f3d3d;
+    }
+
+    @keyframes shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        10% { transform: translate(-1px, -2px) rotate(-1deg); }
+        20% { transform: translate(-10px, 0px) rotate(1deg); }
+        30% { transform: translate(3px, 10px) rotate(0deg); }
+        40% { transform: translate(1px, -1px) rotate(1deg); }
+        50% { transform: translate(-1px, 2px) rotate(-1deg); }
+        60% { transform: translate(-13px, 1px) rotate(0deg); }
+        70% { transform: translate(3px, 10px) rotate(-1deg); }
+        80% { transform: translate(-1px, -1px) rotate(1deg); }
+        90% { transform: translate(1px, 2px) rotate(0deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
     }
 
     @keyframes colorCycle {
@@ -423,7 +444,7 @@
 
     <h2 style="margin: 0.5rem 0">Fire and Stop Control</h2>
     <div class="control-row" style="margin-top: 1rem; justify-content: center;">
-        <button class="btn-cmd btn-send fire" onclick="sendCmdWithArgs({cmd: 'FIRE', seconds: 5})" id="btnFire">FIRE</button>
+        <button class="btn-cmd btn-send fire" onpointerdown="sendCmdWithArgs({cmd: 'FIRE', seconds: 5})" id="btnFire">FIRE</button>
         <button class="btn-cmd btn-send" style="background-color: #f44336; width: 100px; height: 50px; border-radius: 30px; margin-block: auto; border: 2px solid #d32f2f;" onclick="sendCmd('STOP')" id="btnStop">STOP</button>
     </div>
   </div>
