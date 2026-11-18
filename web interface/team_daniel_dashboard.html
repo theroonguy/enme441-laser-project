@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DANIEL!</title>
+
+  <!-- MQTT.js from CDN — this is the only external dependency -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Metal+Mania&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #242322;
+      --surface: #3a3f42;
+      --text: #dbdbd9;
+      --text-muted: #cdcbc5;
+      --border: #5b564b;
+      --accent: #e29d25;
+      --green: #1d9e75;
+      --red: #c94a4a;
+      --amber: #ba7517;
+      --green-bg: #e8f6f0;
+      --red-bg: #fceaea;
+      --code-bg: #f0efe8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    /* ── Connection panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .panel h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .config-grid.three-col {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    input:focus, select:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+      border-color: var(--accent);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    button {
+      padding: 0.5rem 1.25rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-connect {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-disconnect {
+      background: var(--red);
+      color: white;
+    }
+
+    /* ── Status indicator ── */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      margin-top: 0.75rem;
+    }
+
+    .status.offline { background: var(--red-bg); color: var(--red); }
+    .status.online { background: var(--green-bg); color: var(--green); }
+    .status.unknown { background: var(--code-bg); color: var(--text-muted); }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .status-label {
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.7rem;
+      opacity: 0.75;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── Sensor data ── */
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .sensor-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .sensor-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .sensor-value {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sensor-value.no-data {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* ── Controls ── */
+    .control-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-cmd {
+      padding: 0.6rem 1.5rem;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+
+    .btn-on { background: var(--green); color: white; }
+    .btn-off { background: var(--text-muted); color: white; }
+
+    .custom-cmd {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      flex: 1 1 100%;
+    }
+
+    .custom-cmd input { flex: 1; }
+
+    .btn-send {
+      background: var(--amber);
+      color: white;
+      white-space: nowrap;
+    }
+
+    /* ── Log ── */
+    .log {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      max-height: 240px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    .log .ts { color: var(--text-muted); }
+    .log .topic { color: var(--accent); }
+    .log .sys { color: var(--amber); font-style: italic; }
+    .log:empty::before {
+      content: 'No messages yet...';
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .log-controls {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 0.5rem;
+    }
+
+    .btn-clear {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.75rem;
+    }
+
+    /* ── Jog Controls ── */
+
+    .jog-controls {
+        display: grid;
+        grid-template-areas:
+            ". . up . ."
+            "fine-left left zero right fine-right"
+            ". . down . .";
+        width: 400px;
+        margin: 1rem auto;
+        gap: 0.25rem;
+    }
+
+    .jog-controls button {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .jog-up { grid-area: up; }
+    .jog-down { grid-area: down; }
+    .jog-left { grid-area: left; }
+    .jog-right { grid-area: right; }
+    .jog-fine-left { grid-area: fine-left; }
+    .jog-fine-right { grid-area: fine-right; }
+    .jog-zero { grid-area: zero; }
+
+    button.fire {
+        width: 150px;
+        height: 150px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        background-color: #f44336;
+        color: white;
+        border-radius: calc(150px / 2);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+        border: 4px solid #9a2727;
+    }
+
+    @keyframes colorCycle {
+        0%   { color: #ff6b6b; transform: translateY(0); }
+        40%  { color: #e12aba; transform: translateY(-10px); }
+        80% { color: #f31f1f; transform: translateY(-20px); }
+        100%   { color: #ff6b6b; transform: translateY(0); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      .config-grid, .config-grid.three-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- <h1>Team <div style="font-family: Metal Mania; display: inline; font-size: 4rem; color: #f70c0c; animation: colorCycle 2s infinite;">DANIEL!</div></h1> -->
+  <!-- <h1 stlye="margin: 0">Team: </h1> -->
+  <img src="daniel.png" alt="Daniel" style="width: 100%; max-width: 400px; display: block; margin: 0 auto;">
+
+  <p class="subtitle" style="text-align: center;">"Trying" "Our" "Best"</p>
+
+  <!-- ─── Connection settings ─── -->
+  <div class="panel">
+    <h2>Broker connection</h2>
+    <div class="config-grid">
+      <div>
+        <label for="broker">Broker URL</label>
+        <input id="broker" type="text" placeholder="abc123.s1.eu.hivemq.cloud" value="69702dc0158e4b3ea7e406ed4c78ae13.s1.eu.hivemq.cloud">
+      </div>
+      <div>
+        <label for="port">WebSocket Port</label>
+        <input id="port" type="text" value="8884">
+      </div>
+    </div>
+
+    <div class="config-grid three-col" style="margin-top: 0.75rem;">
+      <div>
+        <label for="username">Username</label>
+        <input id="username" type="text" placeholder="course-student" value="enme441">
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="password" value="enme441iot">
+      </div>
+      <div>
+        <label for="studentId">Terpmail Username</label>
+        <input id="studentId" type="text" placeholder="">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-connect" id="btnConnect" onclick="doConnect()">Connect</button>
+      <button class="btn-disconnect" id="btnDisconnect" onclick="doDisconnect()" disabled>Disconnect</button>
+    </div>
+
+    <div class="status-row">
+      <div class="status offline" id="statusBadge">
+        <span class="status-dot"></span>
+        <span class="status-label">Broker</span>
+        <span id="statusText">Disconnected</span>
+      </div>
+      <div class="status unknown" id="deviceBadge">
+        <span class="status-dot"></span>
+        <span class="status-label">ESP32</span>
+        <span id="deviceText">Unknown</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Custom Controls</h2>
+    <div class="config-grid three-col" style="max-width: 400px; margin-bottom: 1rem; margin-inline: auto">
+        <div>
+            <label for="azimuth">Azimuth</label>
+            <input id="azimuth" type="text" placeholder="0.0" value="0.0">
+        </div>
+        <div>
+            <label for="altitude">Altitude</label>
+            <input id="altitude" type="text" placeholder="0.0" value="0.0">
+        </div>
+        <div>
+            <button class="btn-cmd btn-send" style="background-color: #4CAF50; margin-top: 1.25rem; border: 2px solid #45a049;" onclick="sendCmdWithArgs({cmd: 'GOTO', az: document.getElementById('azimuth').value, alt: document.getElementById('altitude').value})" id="btnGoto">GO</button>
+        </div>
+    </div>
+    <h2 style="margin: 0.5rem 0">Jog Controls</h2>
+    <div class="jog-controls">
+        <button class="btn-cmd btn-send jog-up" style="background-color: #2196F3;" onclick="sendCmdWithArgs({ cmd: 'JOG', axis: 'alt', deg: 5 })" id="btnJogUp">↑</button>
+        <button class="btn-cmd btn-send jog-down" style="background-color: #2196F3;" onclick="sendCmdWithArgs({ cmd: 'JOG', axis: 'alt', deg: -5 })" id="btnJogDown">↓</button>
+        <button class="btn-cmd btn-send jog-left" style="background-color: #2196F3;" onclick="sendCmdWithArgs({ cmd: 'JOG', axis: 'az', deg: -5 })" id="btnJogLeft">←</button>
+        <button class="btn-cmd btn-send jog-right" style="background-color: #2196F3;" onclick="sendCmdWithArgs({ cmd: 'JOG', axis: 'az', deg: 5 })" id="btnJogRight">→</button>
+        <button class="btn-cmd btn-send jog-fine-left" style="background-color: #81bae9;" onclick="sendCmdWithArgs({ cmd: 'STEP', axis: 'az', steps: -20 })" id="btnJogFineLeft">←</button>
+        <button class="btn-cmd btn-send jog-fine-right" style="background-color: #81bae9;" onclick="sendCmdWithArgs({ cmd: 'STEP', axis: 'az', steps: 20 })" id="btnJogFineRight">→</button>
+        <button class="btn-cmd btn-send jog-zero" style="background-color: #ff9800; font-size: 1rem; padding: 0; justify-content: center;" onclick="sendCmdWithArgs({ cmd: 'GOTO', az: 0, alt: 0 })" id="btnJogZero">ZERO</button>
+    </div>
+
+    <h2 style="margin: 0.5rem 0">Fire and Stop Control</h2>
+    <div class="control-row" style="margin-top: 1rem; justify-content: center;">
+        <button class="btn-cmd btn-send fire" onclick="sendCmdWithArgs({cmd: 'FIRE', seconds: 5})" id="btnFire">FIRE</button>
+        <button class="btn-cmd btn-send" style="background-color: #f44336; width: 100px; height: 50px; border-radius: 30px; margin-block: auto; border: 2px solid #d32f2f;" onclick="sendCmd('STOP')" id="btnStop">STOP</button>
+    </div>
+  </div>
+
+  <!-- ─── Sensor data ─── -->
+  <div class="panel">
+    <h2>Sensor data</h2>
+    <div class="sensor-grid" id="sensorGrid">
+      <div class="sensor-card">
+        <div class="sensor-label">sensor_1</div>
+        <div class="sensor-value no-data" id="val-sensor_1">—</div>
+      </div>
+      <div class="sensor-card">
+        <div class="sensor-label">sensor_2</div>
+        <div class="sensor-value no-data" id="val-sensor_2">—</div>
+      </div>
+      <div class="sensor-card">
+        <div class="sensor-label">Uptime (ms)</div>
+        <div class="sensor-value no-data" id="val-uptime">—</div>
+      </div>
+      <div class="sensor-card">
+        <div class="sensor-label">Device status</div>
+        <div class="sensor-value no-data" id="val-status">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Controls ─── -->
+  <div class="panel">
+    <h2>Send commands</h2>
+    <div class="control-row">
+      <button class="btn-cmd btn-on" onclick="sendCmd('LED_ON')" id="btnLedOn" disabled>LED On</button>
+      <button class="btn-cmd btn-off" onclick="sendCmd('LED_OFF')" id="btnLedOff" disabled>LED Off</button>
+      <div class="custom-cmd">
+        <input id="customCmd" type="text" placeholder='Custom JSON, e.g. {"cmd":"SET_INTERVAL","value":10}'>
+        <button class="btn-cmd btn-send" onclick="sendCustom()" id="btnSendCustom" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Message log ─── -->
+  <div class="panel">
+    <h2>Message log</h2>
+    <div class="log" id="log"></div>
+    <div class="log-controls">
+      <button class="btn-clear" onclick="document.getElementById('log').innerHTML=''">Clear log</button>
+    </div>
+  </div>
+
+  <script>
+    // ================================================================
+    // MQTT connection and message handling
+    // ================================================================
+
+    let client = null;
+
+    // ── ESP32 liveness watchdog ──────────────────────────────────────
+    // The broker only publishes the Last Will after the ESP32 misses its
+    // keep-alive (typically 1.5x the keepalive interval, so 60-90 s with the
+    // default settings).  That is far too slow to notice a dead device, so the
+    // dashboard also times out on its own: if no message arrives from the
+    // ESP32 within DEVICE_TIMEOUT_MS, we declare it offline.  Set this to a
+    // few times the ESP32's publish interval (main.py publishes every 5 s).
+    const DEVICE_TIMEOUT_MS = 15000;
+
+    let lastDeviceMsg = 0;      // timestamp of the last message from the ESP32
+    let deviceOnline = false;
+    let watchdogTimer = null;
+
+    function getConfig() {
+      return {
+        broker:    document.getElementById('broker').value.trim(),
+        port:      document.getElementById('port').value.trim(),
+        username:  document.getElementById('username').value.trim(),
+        password:  document.getElementById('password').value.trim(),
+        studentId: document.getElementById('studentId').value.trim(),
+      };
+    }
+
+    // ── Connect ──
+    function doConnect() {
+      const cfg = getConfig();
+      if (!cfg.broker || !cfg.username || !cfg.password || !cfg.studentId) {
+        return logSys('Please fill in all connection fields.');
+      }
+
+      // Build the WebSocket URL
+      // HiveMQ Cloud uses wss://<host>:8884/mqtt
+      const url = `wss://${cfg.broker}:${cfg.port}/mqtt`;
+
+      logSys(`Connecting to ${url}...`);
+
+      client = mqtt.connect(url, {
+        username: cfg.username,
+        password: cfg.password,
+        clientId: `web_${cfg.studentId}_${Math.random().toString(16).slice(2, 8)}`,
+        protocolVersion: 4,
+        clean: true,
+        reconnectPeriod: 5000,
+      });
+
+      client.on('connect', () => {
+        logSys('Connected to broker.');
+        setStatus(true);
+        setControls(true);
+        startWatchdog();
+
+        // Subscribe to sensor data and status topics
+        const topicSensor = `enme441/${cfg.studentId}/sensor`;
+        const topicStatus = `enme441/${cfg.studentId}/status`;
+
+        client.subscribe([topicSensor, topicStatus], (err) => {
+          if (err) {
+            logSys('Subscribe error: ' + err.message);
+          } else {
+            logSys(`Subscribed to ${topicSensor} and ${topicStatus}`);
+          }
+        });
+      });
+
+      client.on('message', (topic, message) => {
+        const payload = message.toString();
+        logMsg(topic, payload);
+
+        // Any traffic from the ESP32 counts as a sign of life
+        lastDeviceMsg = Date.now();
+        if (!topic.endsWith('/status')) setDevice(true);
+
+        // Update sensor display
+        if (topic.endsWith('/sensor')) {
+          try {
+            const data = JSON.parse(payload);
+            updateSensor('sensor_1', data.sensor_1);
+            updateSensor('sensor_2', data.sensor_2);
+            updateSensor('uptime', data.uptime);
+
+            // If the ESP32 sends additional fields, display them too
+            for (const [key, value] of Object.entries(data)) {
+              if (key !== 'sensor_1' && key !== 'sensor_2' && key !== 'uptime') {
+                updateSensor(key, value);
+              }
+            }
+          } catch (e) {
+            // Not JSON — display raw value
+            updateSensor('sensor_1', payload);
+          }
+        }
+
+        // Update device status.  An "offline" payload here is the Last Will,
+        // published by the broker on the ESP32's behalf.
+        if (topic.endsWith('/status')) {
+          updateSensor('status', payload);
+          setDevice(!/offline/i.test(payload));
+        }
+      });
+
+      client.on('error', (err) => {
+        logSys('Connection error: ' + err.message);
+        setStatus(false);
+      });
+
+      client.on('close', () => {
+        logSys('Connection closed.');
+        setStatus(false);
+        setControls(false);
+        stopWatchdog();
+      });
+
+      client.on('reconnect', () => {
+        logSys('Attempting to reconnect...');
+      });
+    }
+
+    // ── Disconnect ──
+    function doDisconnect() {
+      if (client) {
+        client.end(true);
+        client = null;
+        logSys('Disconnected.');
+        setStatus(false);
+        setControls(false);
+        stopWatchdog();
+      }
+    }
+
+    // ── Send a predefined command ──
+    function sendCmd(cmd) {
+      const cfg = getConfig();
+      const topic = `enme441/${cfg.studentId}/commands`;
+      const payload = JSON.stringify({ cmd: cmd });
+      client.publish(topic, payload);
+      logSys(`Sent to ${topic}: ${payload}`);
+    }
+
+    function sendCmdWithArgs(cmd) {
+        const cfg = getConfig();
+        const topic = `enme441/${cfg.studentId}/commands`;
+        const payload = JSON.stringify(cmd);
+        client.publish(topic, payload);
+        logSys(`Sent to ${topic}: ${payload}`);
+    }
+
+    // ── Send a custom command ──
+    function sendCustom() {
+      const cfg = getConfig();
+      const input = document.getElementById('customCmd').value.trim();
+      if (!input) return;
+      const topic = `enme441/${cfg.studentId}/commands`;
+      client.publish(topic, input);
+      logSys(`Sent to ${topic}: ${input}`);
+      document.getElementById('customCmd').value = '';
+    }
+
+    // ================================================================
+    // UI helpers
+    // ================================================================
+
+    function setStatus(online) {
+      const badge = document.getElementById('statusBadge');
+      const text = document.getElementById('statusText');
+      badge.className = online ? 'status online' : 'status offline';
+      text.textContent = online ? 'Connected' : 'Disconnected';
+      document.getElementById('btnConnect').disabled = online;
+      document.getElementById('btnDisconnect').disabled = !online;
+    }
+
+    // Broker status only reflects the browser's own link to the broker.
+    // The ESP32 has its own badge, driven by setDevice() below.
+    function setDevice(online) {
+      const badge = document.getElementById('deviceBadge');
+      // Nothing to do unless the state actually changed (avoids log spam)
+      if (online === deviceOnline && badge.className !== 'status unknown') return;
+      deviceOnline = online;
+      badge.className = online ? 'status online' : 'status offline';
+      document.getElementById('deviceText').textContent = online ? 'Online' : 'Offline';
+      if (!online) logSys('ESP32 is offline.');
+    }
+
+    function setDeviceUnknown() {
+      deviceOnline = false;
+      document.getElementById('deviceBadge').className = 'status unknown';
+      document.getElementById('deviceText').textContent = 'Unknown';
+    }
+
+    // Check once a second whether the ESP32 has gone quiet
+    function startWatchdog() {
+      stopWatchdog();
+      lastDeviceMsg = Date.now();
+      watchdogTimer = setInterval(() => {
+        if (deviceOnline && Date.now() - lastDeviceMsg > DEVICE_TIMEOUT_MS) {
+          setDevice(false);
+          updateSensor('status', `no data for ${Math.round(DEVICE_TIMEOUT_MS / 1000)}s`);
+        }
+      }, 1000);
+    }
+
+    function stopWatchdog() {
+      if (watchdogTimer) clearInterval(watchdogTimer);
+      watchdogTimer = null;
+      setDeviceUnknown();
+    }
+
+    function setControls(enabled) {
+      document.getElementById('btnLedOn').disabled = !enabled;
+      document.getElementById('btnLedOff').disabled = !enabled;
+      document.getElementById('btnSendCustom').disabled = !enabled;
+    }
+
+    function updateSensor(key, value) {
+      let el = document.getElementById(`val-${key}`);
+      if (!el) {
+        // Dynamically create a card for unknown sensor fields
+        const grid = document.getElementById('sensorGrid');
+        const card = document.createElement('div');
+        card.className = 'sensor-card';
+        card.innerHTML = `
+          <div class="sensor-label">${key}</div>
+          <div class="sensor-value" id="val-${key}">—</div>
+        `;
+        grid.appendChild(card);
+        el = document.getElementById(`val-${key}`);
+      }
+      el.textContent = value;
+      el.classList.remove('no-data');
+    }
+
+    function logMsg(topic, payload) {
+      const log = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      log.innerHTML += `<div><span class="ts">${ts}</span>  <span class="topic">${topic}</span>  ${escapeHtml(payload)}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function logSys(text) {
+      const log = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      log.innerHTML += `<div><span class="ts">${ts}</span>  <span class="sys">${escapeHtml(text)}</span></div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Allow Enter key in custom command input
+    document.getElementById('customCmd').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !document.getElementById('btnSendCustom').disabled) {
+        sendCustom();
+      }
+    });
+  </script>
+</body>
+</html>
