@@ -42,45 +42,73 @@ class Turret:
     # --- laser ---------------------------------------------------------------
 
     def laser_on(self):
-        pass  # YOUR CODE HERE
+        self.laser.value(1)
 
     def laser_off(self):
-        pass  # YOUR CODE HERE
+        self.laser.value(0)
 
-    def fire(self, seconds=None):
+    async def fire(self, seconds=None):
         """Laser on for exactly `seconds`, then off."""
-        pass  # YOUR CODE HERE
+        self.laser.value(1)
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            self.laser.value(0)
 
     # --- motion --------------------------------------------------------------
 
     def goto(self, az=None, alt=None):
         """Absolute move.  Both axes must arrive together."""
-        pass  # YOUR CODE HERE
+        Stepper.move_together((self.az, az), (self.alt, alt))
 
     def jog(self, axis, deg):
         """Relative move, degrees."""
-        pass  # YOUR CODE HERE
+        if axis == 'az':
+            self.az.rotate(deg)
+        elif axis == 'alt':
+            self.alt.rotate(deg)
 
     def step(self, axis, steps):
         """Relative move, raw half-steps."""
-        pass  # YOUR CODE HERE
+        dir = 1 if steps > 0 else -1
+
+        if axis == 'az':
+            self.az._arm(abs(steps), dir)
+        elif axis == 'alt':
+            self.alt._arm(abs(steps), dir)
 
     def zero(self, axis=None):
         """Current position becomes 0 deg, for one axis or both."""
-        pass  # YOUR CODE HERE
+        if axis == 'az':
+            self.az.zero()
+        elif axis == 'alt':
+            self.alt.zero()
+        else:
+            self.az.zero()
+            self.alt.zero()
 
     def release(self):
-        pass  # YOUR CODE HERE
+        self.az.release()
+        self.alt.release()
 
     def stop(self):
         """Abort everything.  Laser off first."""
-        pass  # YOUR CODE HERE
+        self.laser_off()
+        Stepper.stop()
+        self.az.release()
+        self.alt.release()
 
     # --- state ---------------------------------------------------------------
 
     def telemetry(self):
         """Return a dict describing the current state."""
-        pass  # YOUR CODE HERE
+        return {
+            'az': self.az.angle(),
+            'alt': self.alt.angle(),
+            'laser': self.laser.value(),
+            'in_progress': self.az._lock.locked() or self.alt._lock.locked(),
+            'pending_message': self.message,
+        }
 
 
 class Comms:
@@ -95,20 +123,44 @@ class Comms:
 
         self.dispatch = {
             # 'CMD': lambda d: ...,
-            # YOUR CODE HERE
+            # 'LED_ON': 
         }
 
     # --- connection ----------------------------------------------------------
 
     def connect(self):
         """TLS connect, last will, subscribe, announce."""
-        pass  # YOUR CODE HERE
+        self.client = MQTTClient(config.TERPMAIL_USERNAME, config.MQTT_BROKER, config.MQTT_PORT,
+                        config.MQTT_USER, config.MQTT_PASS, ssl=True,
+                        ssl_params={'server_hostname': config.MQTT_BROKER})
+        self.client.set_callback(self._on_message)     # set callback for check_msg()
+        self.client.connect()
+        self.client.subscribe(config.TOPIC_COMMANDS)
+        self.client.set_last_will(config.TOPIC_STATUS, b'offline', retain=True)
+        self.client.publish(config.TOPIC_STATUS, b'online', retain=True)
+
+        print(f'Connected to MQTT broker, subscribed to {config.TOPIC_COMMANDS}')
+
+        self.connected = True
 
     # --- incoming ------------------------------------------------------------
 
     def _on_message(self, topic, msg):
         """umqtt callback.  Runs inside check_msg(), so keep it short."""
-        pass  # YOUR CODE HERE
+        print(f'Received on {topic}: {msg}')
+        try:
+            data = json.loads(msg)
+            cmd = data.get('cmd', '')
+
+            # if cmd == 'LASER_ON':
+            #     self.turret.laser_on()    # inverted logic (pull-up R on LED)
+            #     print('LED turned ON')
+            # elif cmd == 'LASER_OFF':
+            #     self.turret.laser_off()
+            #     print('LED turned OFF')
+            
+        except Exception as e:
+            print('Error parsing message:', e)
 
     async def _rx_loop(self):
         """Poll the broker forever."""
