@@ -1,6 +1,8 @@
 # =============================================================================
 # ENME 441 - Lab 10: Brokered communication
 #
+# Team: Haroon Amanullah, Michael Hannah, Ayden Leith, Daniel Gregory
+#
 # Code template
 #
 # Two rules:
@@ -23,7 +25,7 @@ from lab8 import Stepper
 
 LASER_PIN = 8           # onboard LED, active LOW -- stands in for the laser
 
-PUBLISH_MS = 2000       # time between publish events
+PUBLISH_MS = 1000       # time between publish events
 
 class Turret:
     """Two axes and a laser"""
@@ -42,50 +44,58 @@ class Turret:
     # --- laser ---------------------------------------------------------------
 
     def laser_on(self):
-        self.laser.value(1)
-
-    def laser_off(self):
         self.laser.value(0)
 
-    async def fire(self, seconds=None):
-        """Laser on for exactly `seconds`, then off."""
+    def laser_off(self):
         self.laser.value(1)
+
+    async def fire(self, seconds):
+        """Laser on for exactly `seconds`, then off."""
+        self.laser_on()
+        self.firing = True
         try:
             await asyncio.sleep(seconds)
         finally:
-            self.laser.value(0)
+            self.laser_off()
+            self.firing = False
 
     # --- motion --------------------------------------------------------------
 
-    def goto(self, az=None, alt=None):
+    async def goto(self, az=None, alt=None):
         """Absolute move.  Both axes must arrive together."""
-        Stepper.move_together((self.az, az), (self.alt, alt))
+        await Stepper.go_together((self.az, float(az)), (self.alt, float(alt)))
+        return
 
-    def jog(self, axis, deg):
+    async def jog(self, axis, deg):
         """Relative move, degrees."""
         if axis == 'az':
-            self.az.rotate(deg)
+            await self.az.rotate(deg)
         elif axis == 'alt':
-            self.alt.rotate(deg)
+            await self.alt.rotate(deg)
+        
+        return
 
-    def step(self, axis, steps):
+    async def step(self, axis, steps):
         """Relative move, raw half-steps."""
         dir = 1 if steps > 0 else -1
 
         if axis == 'az':
-            self.az._arm(abs(steps), dir)
+            await self.az._arm(abs(steps), dir)
         elif axis == 'alt':
-            self.alt._arm(abs(steps), dir)
+            await self.alt._arm(abs(steps), dir)
 
-    def zero(self, axis=None):
+        return
+
+    async def zero(self, axis=None):
         """Current position becomes 0 deg, for one axis or both."""
         if axis == 'az':
-            self.az.zero()
+            await self.az.zero()
         elif axis == 'alt':
-            self.alt.zero()
+            await self.alt.zero()
         else:
-            self.az.zero()
-            self.alt.zero()
+            await Stepper.go_together((self.az, 0), (self.alt, 0))
+
+        return
 
     def release(self):
         self.az.release()
@@ -95,19 +105,19 @@ class Turret:
         """Abort everything.  Laser off first."""
         self.laser_off()
         Stepper.stop()
-        self.az.release()
-        self.alt.release()
+        self.release()
 
     # --- state ---------------------------------------------------------------
 
     def telemetry(self):
         """Return a dict describing the current state."""
         return {
-            'az': self.az.angle(),
-            'alt': self.alt.angle(),
-            'laser': self.laser.value(),
-            'in_progress': self.az._lock.locked() or self.alt._lock.locked(),
+            'az': self.az.angle,
+            'alt': self.alt.angle,
+            'laser': not self.laser.value(),
+            'in_progress': self.az._lock.locked() or self.alt._lock.locked() or self.firing,
             'pending_message': self.message,
+            'uptime': time.ticks_ms(),
         }
 
 
@@ -122,22 +132,45 @@ class Comms:
         turret.notify = self.publish_telemetry
 
         self.dispatch = {
-            # 'CMD': lambda d: ...,
-            # 'LED_ON': 
+            'GOTO': lambda d: asyncio.create_task(self.turret.goto(d.get('az'), d.get('alt'))),
+            'JOG': lambda d: asyncio.create_task(self.turret.jog(d.get('axis'), d.get('deg'))),
+            'STEP': lambda d: asyncio.create_task(self.turret.step(d.get('axis'), d.get('steps'))),
+            'ZERO': lambda d: asyncio.create_task(self.turret.zero(d.get('axis'))),
+            'FIRE': lambda d: asyncio.create_task(self.turret.fire(d.get('seconds'))),
+            'STOP': lambda d: self.turret.stop(),
+            'LASER_ON': lambda d: self.turret.laser_on(),
+            'LASER_OFF': lambda d: self.turret.laser_off(),
+            'STATUS': lambda d: self.publish_telemetry(),
         }
 
     # --- connection ----------------------------------------------------------
 
     def connect(self):
         """TLS connect, last will, subscribe, announce."""
-        self.client = MQTTClient(config.TERPMAIL_USERNAME, config.MQTT_BROKER, config.MQTT_PORT,
-                        config.MQTT_USER, config.MQTT_PASS, ssl=True,
-                        ssl_params={'server_hostname': config.MQTT_BROKER})
-        self.client.set_callback(self._on_message)     # set callback for check_msg()
+        self.client = MQTTClient(
+            config.TERPMAIL_USERNAME, 
+            config.MQTT_BROKER, 
+            config.MQTT_PORT,
+            config.MQTT_USER, 
+            config.MQTT_PASS, 
+            keepalive=30,
+            ssl=True,
+            ssl_params={'server_hostname': config.MQTT_BROKER})
+        
+        self.client.set_callback(self._on_message)     
+        self.client.set_last_will(
+            config.TOPIC_STATUS, 
+            b'offline', 
+            retain=True
+        )
+
         self.client.connect()
         self.client.subscribe(config.TOPIC_COMMANDS)
-        self.client.set_last_will(config.TOPIC_STATUS, b'offline', retain=True)
-        self.client.publish(config.TOPIC_STATUS, b'online', retain=True)
+        self.client.publish(
+            config.TOPIC_STATUS, 
+            b'online', 
+            retain=True
+        )
 
         print(f'Connected to MQTT broker, subscribed to {config.TOPIC_COMMANDS}')
 
@@ -150,37 +183,49 @@ class Comms:
         print(f'Received on {topic}: {msg}')
         try:
             data = json.loads(msg)
-            cmd = data.get('cmd', '')
+            handler = self.dispatch.get(data.get('cmd', ''))
 
-            # if cmd == 'LASER_ON':
-            #     self.turret.laser_on()    # inverted logic (pull-up R on LED)
-            #     print('LED turned ON')
-            # elif cmd == 'LASER_OFF':
-            #     self.turret.laser_off()
-            #     print('LED turned OFF')
-            
+            if handler:
+                handler(data)
+                self.turret.message = data.get('cmd', '')
+                self.publish_telemetry()
+            else:
+                print(f'Unknown command: {data.get("cmd", "")}')
         except Exception as e:
             print('Error parsing message:', e)
 
     async def _rx_loop(self):
         """Poll the broker forever."""
-        pass  # YOUR CODE HERE
+        while True:
+            self.client.check_msg()
+            await asyncio.sleep_ms(100)
 
     # --- outgoing ------------------------------------------------------------
 
     def publish_telemetry(self):
         """Send one telemetry packet on the sensor topic."""
-        pass  # YOUR CODE HERE
+        if not self.connected:
+            return
+
+        try:
+            telemetry = self.turret.telemetry()
+            self.client.publish(config.TOPIC_SENSOR, json.dumps(telemetry))
+        except Exception as e:
+            print('Error publishing telemetry:', e)
 
     async def _tx_loop(self):
         """Publish telemetry every PUBLISH_MS forever."""
-        pass  # YOUR CODE HERE
+        while True:
+            self.publish_telemetry()
+            await asyncio.sleep_ms(PUBLISH_MS)
 
     # --- entry point ---------------------------------------------------------
 
     def start(self):
         """Launch both loops as tasks.  Returns immediately."""
-        pass  # YOUR CODE HERE
+        self.connect()
+        asyncio.create_task(self._rx_loop())
+        asyncio.create_task(self._tx_loop())
 
 
 async def main():

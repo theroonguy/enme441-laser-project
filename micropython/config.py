@@ -7,7 +7,7 @@
 
 # Change the value of UMD_IOT_PASSWORD to the password provided
 # during your umd-iot device registration process
-UMD_IOT_PASSWORD = 'your_umd_iot_password'
+UMD_IOT_PASSWORD = 'JEhrhW5nH4rT' # this is my password fyi (this is me talking (if you're wondering who that is, i'm referring to haroon))
 
 # WiFi ssid / password pairs -- you can add more networks as 
 # separate (ssid,pass) entries in the list
@@ -18,7 +18,7 @@ WIFI_NETWORKS = [('umd-iot', UMD_IOT_PASSWORD)]
 # ===========================
 
 # Change to your terpmail user name (for use with HiveMQ MQTT comms)
-TERPMAIL_USERNAME = 'your_terpmail_username' 
+TERPMAIL_USERNAME = 'haroon' 
 
 # HiveMQ broker - ENME441 server details (DO NOT EDIT)
 MQTT_BROKER = '69702dc0158e4b3ea7e406ed4c78ae13.s1.eu.hivemq.cloud'
