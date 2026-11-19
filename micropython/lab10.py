@@ -153,7 +153,7 @@ class Comms:
             config.MQTT_PORT,
             config.MQTT_USER, 
             config.MQTT_PASS, 
-            keepalive=30,
+            keepalive=1,
             ssl=True,
             ssl_params={'server_hostname': config.MQTT_BROKER})
         

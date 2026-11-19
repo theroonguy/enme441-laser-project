@@ -11,7 +11,8 @@ UMD_IOT_PASSWORD = 'JEhrhW5nH4rT' # this is my password fyi (this is me talking 
 
 # WiFi ssid / password pairs -- you can add more networks as 
 # separate (ssid,pass) entries in the list
-WIFI_NETWORKS = [('umd-iot', UMD_IOT_PASSWORD)]
+WIFI_NETWORKS = [('umd-iot', UMD_IOT_PASSWORD),
+                 ('Verizon_M6YWDY', 'brad-wry7-fir')]
 
 # ===========================
 # New Content
